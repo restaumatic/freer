@@ -70,6 +70,7 @@ orThrowError = flip remark
 orThrowErrorM :: Member (Exc e) r => Eff r (Maybe v) -> e -> Eff r v
 orThrowErrorM = flip remarkM
 
+infix 1 `orThrowError`, `orThrowErrorM`
 
 ------------------------------------------------------------------------------
 -- | Tag the 'Left' value of an 'Either' by throwing it as an 'Exc'.
