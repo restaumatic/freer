@@ -41,7 +41,9 @@ library
                      , Eff.Exc
                      , Eff.Exc.Pure
                      , Eff.Functor
+                     , Eff.Identity
                      , Eff.Internal
+                     , Eff.InterpreterHelpers
                      , Eff.Reader
                      , Eff.Reader.Pure
                      , Eff.Region
