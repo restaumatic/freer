@@ -1,7 +1,8 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP            #-}
+{-# LANGUAGE DataKinds      #-}
+{-# LANGUAGE MonoLocalBinds #-}
+{-# LANGUAGE RankNTypes     #-}
+{-# LANGUAGE TypeOperators  #-}
 {-|
 Module      : Eff
 Description : Freer - an extensible effects library
@@ -33,10 +34,10 @@ module Eff (
 ) where
 
 #if __GLASGOW_HASKELL__ < 710
-import Control.Applicative (pure)
+import           Control.Applicative (pure)
 #endif
 
-import Eff.Internal
+import           Eff.Internal
 
 runNat
   :: forall m r e w.
