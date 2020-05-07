@@ -21,6 +21,7 @@ import Tests.Exc
 import Tests.NonDetEff
 import Tests.Reader
 import Tests.State
+import Tests.Union
 
 import qualified Data.List
 
@@ -151,4 +152,5 @@ main = do
     , nonDetEffTests
     , readerTests
     , stateTests
+    , unionTests
     ]

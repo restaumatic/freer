@@ -5,6 +5,8 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- The following is needed to define MonadPlus instance. It is decidable
 -- (there is no recursion!), but GHC cannot see that.
@@ -47,6 +49,7 @@ module Eff.Internal (
   extract,
 
   raise,
+  raiseAt,
 
   qApp,
   qComp,
@@ -62,6 +65,7 @@ module Eff.Internal (
 
 import Control.Monad
 import Control.Applicative
+import GHC.TypeLits (KnownNat)
 import Data.Open.Union
 import Data.FTCQueue
 
@@ -249,6 +253,13 @@ raise = loop
   where
     loop (Val x) = pure x
     loop (E u q) = E (weaken u) . tsingleton $ qComp q loop
+
+-- | Embeds a less-constrained 'Eff' into a more-constrained one, inserting the new effect at a given index.
+raiseAt :: forall i e effs a. KnownNat i => Eff effs a -> Eff (InsertAt i e effs) a
+raiseAt = loop
+  where
+    loop (Val x) = pure x
+    loop (E u q) = E (weakenAt @i @e u) . tsingleton $ qComp q loop
 
 --------------------------------------------------------------------------------
                     -- Nondeterministic Choice --

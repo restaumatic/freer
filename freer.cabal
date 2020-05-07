@@ -90,6 +90,7 @@ test-suite test
                      , Tests.NonDetEff
                      , Tests.Reader
                      , Tests.State
+                     , Tests.Union
   build-depends:    base
                   , freer
                   , tasty

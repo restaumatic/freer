@@ -10,6 +10,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 -- GHC >=7.10 deprecated OverlappingInstances in favour of instance by instance
 -- annotation using OVERLAPPABLE and OVERLAPPING pragmas.
@@ -46,7 +48,7 @@
 -- substitution for @Typeable@.
 module Data.Open.Union.Internal where
 
-import Prelude ((+), (-))
+import Prelude ((+), (-), (<), fromIntegral)
 
 import Data.Bool (otherwise)
 import Data.Either (Either(Left, Right))
@@ -54,7 +56,9 @@ import Data.Eq ((==))
 import Data.Function (($))
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Word (Word)
+import Data.Proxy (Proxy(..))
 import Unsafe.Coerce (unsafeCoerce)
+import GHC.TypeLits (Nat, type (-), KnownNat, natVal)
 
 
 -- | Open union is a strong sum (existential with an evidence).
@@ -186,3 +190,17 @@ extract (Union _ a) = unsafeCoerce a
 weaken :: Union r a -> Union (any ': r) a
 weaken (Union n a) = Union (n + 1) a
 {-# INLINE weaken #-}
+
+type family InsertAt (i :: Nat) (x :: k) (xs :: [k]) :: [k] where
+  InsertAt 0 x xs        = x ': xs
+  InsertAt n x (y ': xs) = y ': InsertAt (n - 1) x xs
+
+-- | Inject whole @'Union' r@ in to weaker union @'Union' (any ': r)@ that has
+-- one more summand at the given (type-level) index @i@.
+--
+-- /O(1)/
+weakenAt :: forall i any r a. KnownNat i => Union r a -> Union (InsertAt i any r) a
+weakenAt (Union n a) =
+  let i = fromIntegral (natVal (Proxy @i))
+  in Union (if n < i then n else n + 1) a
+{-# INLINE weakenAt #-}

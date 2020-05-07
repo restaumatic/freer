@@ -25,6 +25,7 @@ module Eff (
   replaceRelay,
   replaceRelayS,
   raise,
+  raiseAt,
   send,
   Arr,
 

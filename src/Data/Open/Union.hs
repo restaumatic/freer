@@ -36,6 +36,8 @@ module Data.Open.Union (
   Member(..),
   decomp,
   weaken,
+  weakenAt,
+  type InsertAt,
   extract,
   Functor(..)
 ) where
