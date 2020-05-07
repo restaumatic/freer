@@ -54,6 +54,7 @@ module Eff.Internal (
   qApp,
   qComp,
   send,
+  sendU,
   run,
   runM,
   replaceRelay,
@@ -128,6 +129,10 @@ instance Monad (Eff r) where
 -- | send a request and wait for a reply
 send :: Member t r => t v -> Eff r v
 send t = E (inj t) (tsingleton Val)
+
+-- | send a request (represented by an Union) and wait for areply
+sendU :: Union r v -> Eff r v
+sendU u = E u (tsingleton Val)
 
 --------------------------------------------------------------------------------
                        -- Base Effect Runner --
