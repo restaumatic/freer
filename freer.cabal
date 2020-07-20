@@ -99,16 +99,3 @@ test-suite test
                   , QuickCheck
 
   ghc-options: -Wall
-
-benchmark core
-  default-language: Haskell2010
-  type:             exitcode-stdio-1.0
-  hs-source-dirs:   bench
-  main-is:          Core.hs
-  build-depends:    base
-                  , freer
-                  , criterion
-                  , mtl
-                  , free
-
-  ghc-options: -Wall -O2
