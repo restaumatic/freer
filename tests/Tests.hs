@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP       #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
@@ -24,6 +25,10 @@ import Tests.State
 import Tests.Union
 
 import qualified Data.List
+
+import Eff.SafeIO
+import Eff.State.Pure
+import Control.Exception (catch, Exception, throwIO)
 
 --------------------------------------------------------------------------------
                            -- Pure Tests --
@@ -138,6 +143,39 @@ loopTests :: Int -> TestTree
 loopTests n =
   testGroup "Loop tests" [ testProperty "any number of loops" (\() -> n > 0)]
 
+data WorkFailed = WorkFailed deriving (Show)
+
+instance Exception WorkFailed
+
+--------------------------------------------------------------------------------
+                     -- Bracket Tests --
+--------------------------------------------------------------------------------
+bracketTests :: TestTree
+bracketTests = testGroup "bracket tests"
+  [ testCase "bracket" $ do
+      state <- newIORef []
+      (runSafeIO $
+         Eff.bracket
+           (safeIO $ modifyIORef state ("acquire":))
+           (\_ -> safeIO $ modifyIORef state ("release":))
+           (\_ -> safeIO $ modifyIORef state ("work":) >> throwIO WorkFailed)
+       ) `catch` (\WorkFailed -> pure ())
+      result <- readIORef state
+      reverse result @?= ["acquire", "work", "release"]
+
+  , testCase "bracket + State" $ do
+      state <- newIORef []
+      (runSafeIO $
+       evalState () $
+         Eff.bracket
+           (safeIO $ modifyIORef state ("acquire":))
+           (\_ -> safeIO $ modifyIORef state ("release":))
+           (\_ -> safeIO $ modifyIORef state ("work":) >> throwIO WorkFailed)
+       ) `catch` (\WorkFailed -> pure ())
+      result <- readIORef state
+      reverse result @?= ["acquire", "work", "release"]
+  ]
+
 --------------------------------------------------------------------------------
                              -- Runner --
 --------------------------------------------------------------------------------
@@ -153,4 +191,5 @@ main = do
     , readerTests
     , stateTests
     , unionTests
+    , bracketTests
     ]

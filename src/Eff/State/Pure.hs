@@ -16,10 +16,11 @@ import Data.Proxy
 -- | Handler for State effects
 runState :: s -> Eff (State s ': r) w -> Eff r (w,s)
 runState s (Val x) = return (x,s)
-runState s (E u q) = case decomp u of
+runState s (E (Bracket acquire release work) q) = E (Bracket _ _ _) (runS
+runState s (E (Effect u) q) = case decomp u of
   Right Get      -> runState s (qApp q s)
   Right (Put s') -> runState s' (qApp q ())
-  Left  u'       -> E u' (tsingleton (\x -> runState s (qApp q x)))
+  Left  u'       -> E (Effect u') (tsingleton (\x -> runState s (qApp q x)))
 
 evalState :: s -> Eff (State s ': r) w -> Eff r w
 evalState = (fmap fst .) . runState
@@ -37,8 +38,8 @@ transactionState _ m = do s <- get; loop s m
  where
    loop :: s -> Eff r w -> Eff r w
    loop s (Val x) = put s >> return x
-   loop s (E (u :: Union r b) q) = case prj u :: Maybe (State s b) of
+   loop s (E (Effect (u :: Union r b)) q) = case prj u :: Maybe (State s b) of
      Just Get      -> loop s (qApp q s)
      Just (Put s') -> loop s'(qApp q ())
-     _             -> E u (tsingleton k) where k = qComp q (loop s)
+     _             -> E (Effect u) (tsingleton k) where k = qComp q (loop s)
 

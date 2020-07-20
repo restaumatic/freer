@@ -28,6 +28,7 @@ module Eff (
   raiseAt,
   send,
   sendU,
+  bracket,
   Arr,
 
   NonDetEff(..),

@@ -34,7 +34,7 @@ module Eff.Region
 
 import Control.Exception (SomeException)
 import Eff (Member, send)
-import Eff.Internal (Union, Eff (..), qComp, tsingleton, decomp, prj)
+import Eff.Internal (Union, Eff (..), Action(..), qComp, tsingleton, decomp, prj)
 import Eff.Exc (Exc (..), throwError)
 import Data.Bool (bool)
 import Data.List (delete)
@@ -184,7 +184,7 @@ handleRegionRelay acquireM releaseM catchM = loop []
 
     loop :: [res] -> Eff (RegionEff res (L (Length effs) s) ': effs) a -> Eff effs a
     loop rs (Val x) = releaseAll rs >> return x
-    loop rs (E u q) =
+    loop rs (E (Effect u) q) =
       case decomp u of
         Right (RENew ctor) -> do
           r <- acquireM ctor
@@ -200,7 +200,7 @@ handleRegionRelay acquireM releaseM catchM = loop []
           catchM (releaseAll rs) ignore u'
 
       where
-        ignore u' = E u' . tsingleton $ k rs
+        ignore u' = E (Effect u') . tsingleton $ k rs
         k s = qComp q (loop s)
 
 

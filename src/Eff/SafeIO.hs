@@ -11,7 +11,7 @@ module Eff.SafeIO
 
 import Eff.Internal
 import Eff.Exc
-import Control.Exception (throw, SomeException, try)
+import Control.Exception (throw, SomeException, try, bracket)
 
 ------------------------------------------------------------------------------
 -- | Safe IO effect.
@@ -25,8 +25,9 @@ data SIO a where
 -- exceptions left unhandled in this effect will be rethrown in IO.
 runSafeIO :: Eff '[SIO, Exc SomeException] w -> IO w
 runSafeIO (Val x) = return x
-runSafeIO (E u q) | Just (Safely m) <- prj u = try m >>= runSafeIO . qApp q
-runSafeIO (E u _) | Just (Exc e)    <- prj u = throw (e :: SomeException)
+runSafeIO (E (Effect u) q) | Just (Safely m) <- prj u = try m >>= runSafeIO . qApp q
+runSafeIO (E (Effect u) _) | Just (Exc e)    <- prj u = throw (e :: SomeException)
+runSafeIO (E (Bracket acquire release work) q) = Control.Exception.bracket (runSafeIO acquire) (runSafeIO . release) (runSafeIO . work) >>= runSafeIO . qApp q
 runSafeIO (E _ _) = error "can't happen"
 
 

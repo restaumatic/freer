@@ -34,6 +34,7 @@ starting point.
 -}
 module Eff.Internal (
   Eff(..),
+  Action(..),
   Member(..),
   Members,
   Arr,
@@ -55,6 +56,7 @@ module Eff.Internal (
   qComp,
   send,
   sendU,
+  bracket,
   run,
   runM,
   replaceRelay,
@@ -90,7 +92,11 @@ type Arrs r a b = FTCQueue (Eff r) a b
 -- * Val: Done with the value of type a
 -- * E  : Sending a request of type Union r with the continuation Arrs r b a
 data Eff r a = Val a
-             | forall b. E (Union r b) (Arrs r b a)
+             | forall b. E (Action r b) (Arrs r b a)
+
+data Action r a
+  = Effect (Union r a)
+  | forall b. Bracket (Eff r b) (b -> Eff r ()) (b -> Eff r a)
 
 -- | Function application in the context of an array of effects, Arrs r b w
 qApp :: Arrs r b w -> b -> Eff r w
@@ -128,11 +134,14 @@ instance Monad (Eff r) where
 
 -- | send a request and wait for a reply
 send :: Member t r => t v -> Eff r v
-send t = E (inj t) (tsingleton Val)
+send = sendU . inj
 
 -- | send a request (represented by an Union) and wait for areply
 sendU :: Union r v -> Eff r v
-sendU u = E u (tsingleton Val)
+sendU u = E (Effect u) (tsingleton Val)
+
+bracket :: Eff r b -> (b -> Eff r ()) -> (b -> Eff r a) -> Eff r a
+bracket acquire release work = E (Bracket acquire release work) (tsingleton Val)
 
 --------------------------------------------------------------------------------
                        -- Base Effect Runner --
@@ -154,7 +163,12 @@ run _       = error "Internal:run - This (E) should never happen"
 -- to catch and recover from IO exceptions in 'Eff' code.
 runM :: Monad m => Eff '[m] w -> m w
 runM (Val x) = return x
-runM (E u q) = case extract u of
+runM (E (Bracket acquire release work) q) = do
+  r <- runM acquire
+  result <- runM (work r)
+  runM (release r)
+  runM (qApp q result)
+runM (E (Effect u) q) = case extract u of
   mb -> mb >>= runM . qApp q
 
 -- the other case is unreachable since Union [] a cannot be
@@ -178,9 +192,10 @@ replaceRelayS
 replaceRelayS s' pure' bind = loop s'
  where
   loop s (Val x)  = pure' s x
-  loop s (E u' q)  = case decomp u' of
+  loop s (E (Bracket acquire release work) q) = error "unimplemented"
+  loop s (E (Effect u') q)  = case decomp u' of
     Right x -> bind s x k
-    Left  u -> E (weaken u) (tsingleton (k s))
+    Left  u -> E (Effect (weaken u)) (tsingleton (k s))
    where k s'' x = loop s'' $ qApp q x
 
 -- | Interpret an effect by transforming it into another effect on top of the
@@ -199,9 +214,9 @@ replaceRelay
 replaceRelay pure' bind = loop
  where
   loop (Val x)  = pure' x
-  loop (E u' q)  = case decomp u' of
+  loop (E (Effect u') q)  = case decomp u' of
     Right x -> bind x k
-    Left  u -> E (weaken u) (tsingleton k)
+    Left  u -> E (Effect (weaken u)) (tsingleton k)
    where k = qComp q loop
 
 
@@ -215,9 +230,9 @@ handleRelay
 handleRelay ret h = loop
  where
   loop (Val x)  = ret x
-  loop (E u' q)  = case decomp u' of
+  loop (E (Effect u') q)  = case decomp u' of
     Right x -> h x k
-    Left  u -> E u (tsingleton k)
+    Left  u -> E (Effect u) (tsingleton k)
    where k = qComp q loop
 
 -- | Parameterized 'handleRelay'
@@ -233,9 +248,9 @@ handleRelayS
 handleRelayS s' ret h = loop s'
   where
     loop s (Val x)  = ret s x
-    loop s (E u' q)  = case decomp u' of
+    loop s (E (Effect u') q)  = case decomp u' of
       Right x -> h s x k
-      Left  u -> E u (tsingleton (k s))
+      Left  u -> E (Effect u) (tsingleton (k s))
      where k s'' x = loop s'' $ qApp q x
 
 -- | Intercept the request and possibly reply to it, but leave it
@@ -246,9 +261,9 @@ interpose :: Member t r =>
 interpose ret h = loop
  where
    loop (Val x)  = ret x
-   loop (E u q)  = case prj u of
+   loop (E (Effect u) q)  = case prj u of
      Just x -> h x k
-     _      -> E u (tsingleton k)
+     _      -> E (Effect u) (tsingleton k)
     where k = qComp q loop
 
 -- | Embeds a less-constrained 'Eff' into a more-constrained one. Analogous to
@@ -257,14 +272,14 @@ raise :: Eff effs a -> Eff (e ': effs) a
 raise = loop
   where
     loop (Val x) = pure x
-    loop (E u q) = E (weaken u) . tsingleton $ qComp q loop
+    loop (E (Effect u) q) = E (Effect (weaken u)) . tsingleton $ qComp q loop
 
 -- | Embeds a less-constrained 'Eff' into a more-constrained one, inserting the new effect at a given index.
 raiseAt :: forall i e effs a. KnownNat i => Eff effs a -> Eff (InsertAt i e effs) a
 raiseAt = loop
   where
     loop (Val x) = pure x
-    loop (E u q) = E (weakenAt @i @e u) . tsingleton $ qComp q loop
+    loop (E (Effect u) q) = E (Effect (weakenAt @i @e u)) . tsingleton $ qComp q loop
 
 --------------------------------------------------------------------------------
                     -- Nondeterministic Choice --
@@ -295,12 +310,12 @@ msplit :: Member NonDetEff r
        => Eff r a -> Eff r (Maybe (a, Eff r a))
 msplit = loop []
   where loop jq (Val x)     = return (Just (x, msum jq))
-        loop jq (E u q) =
+        loop jq (E (Effect u) q) =
           case prj u of
             Just MZero ->
               case jq of
                 []     -> return Nothing
                 (j:jq') -> loop jq' j
             Just MPlus -> loop (qApp q False : jq) (qApp q True)
-            Nothing    -> E u (tsingleton k)
+            Nothing    -> E (Effect u) (tsingleton k)
               where k = qComp q (loop jq)
