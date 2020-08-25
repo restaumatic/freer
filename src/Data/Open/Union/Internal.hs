@@ -58,7 +58,7 @@ import Data.Maybe (Maybe(Just, Nothing))
 import Data.Word (Word)
 import Data.Proxy (Proxy(..))
 import Unsafe.Coerce (unsafeCoerce)
-import GHC.TypeLits (Nat, type (-), KnownNat, natVal)
+import GHC.TypeLits (Nat, type (+), type (-), KnownNat, natVal)
 
 
 -- | Open union is a strong sum (existential with an evidence).
@@ -101,23 +101,10 @@ newtype P t r = P {unP :: Word}
 -- The element must exist.
 --
 -- This is essentially a compile-time computation without run-time overhead.
-class FindElem (t :: * -> *) (r :: [* -> *]) where
-    -- | Position of the element @t :: * -> *@ in a type list @r :: [* -> *]@.
-    --
-    -- Position is computed during compilation, i.e. there is no run-time
-    -- overhead.
-    --
-    -- /O(1)/
-    elemNo :: P t r
-
--- | Base case; element is at the current position in the list.
-instance FindElem t (t ': r) where
-    elemNo = P 0
-
--- | Recursion; element is not at the current position, but is somewhere in the
--- list.
-instance PRAGMA_OVERLAPPABLE FindElem t r => FindElem t (t' ': r) where
-    elemNo = P $ 1 + unP (elemNo :: P t r)
+type family FindElem (t :: * -> *) (r :: [* -> *]) :: Nat where
+  FindElem t (t ': r) = 0
+  FindElem t (t' ': t ': r) = 1
+--  FindElem t (t' ': r) = FindElem t r + 1
 
 -- | This type class is used for two following purposes:
 --
@@ -132,7 +119,7 @@ instance PRAGMA_OVERLAPPABLE FindElem t r => FindElem t (t' ': r) where
 -- @
 -- 'prj' . 'inj' === 'Just'
 -- @
-class FindElem t r => Member (t :: * -> *) r where
+class KnownNat (FindElem t r) => Member (t :: * -> *) r where
     -- | Takes a request of type @t :: * -> *@, and injects it into the
     -- 'Union'.
     --
@@ -146,11 +133,11 @@ class FindElem t r => Member (t :: * -> *) r where
     -- /O(1)/
     prj :: Union r a -> Maybe (t a)
 
-instance FindElem t r => Member t r where
-    inj = unsafeInj $ unP (elemNo :: P t r)
+instance KnownNat (FindElem t r) => Member t r where
+    inj = unsafeInj $ fromIntegral $ natVal (Proxy @(FindElem t r))
     {-# INLINE inj #-}
 
-    prj = unsafePrj $ unP (elemNo :: P t r)
+    prj = unsafePrj $ fromIntegral $ natVal (Proxy @(FindElem t r))
     {-# INLINE prj #-}
 
 -- | Orthogonal decomposition of a @'Union' (t ': r) :: * -> *@. 'Right' value
